@@ -1,5 +1,5 @@
 services:
-  - type: web
+  - type: worker
     name: telegram-explain-bot
     env: python
     buildCommand: ""
