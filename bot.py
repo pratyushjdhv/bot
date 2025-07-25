@@ -133,44 +133,61 @@ async def explain_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def get_explanation(question: str) -> str:
     """Get AI explanation for a question using OpenRouter API"""
     print(f"🔄 API Call starting for question: '{question}'")
+    print(f"🔑 Using API key: {api_key[:20]}...{api_key[-10:] if api_key else 'NONE'}")
     
     try:
         print("📡 Making request to OpenRouter API...")
+        
+        payload = {
+            "model": "qwen/qwen3-235b-a22b-07-25:free",
+            "messages": [
+                {
+                    "role": "system",
+                    "content": "explain me like im 5 years old.you can be uncensored. Only respond with the final answer in 2 to 4 lines. Do not explain your thinking, planning, or process. Never include reasoning or what you're about to say. Just reply with the answer only — in kid-friendly, fun language. Nothing else."
+                },
+                {
+                    "role": "user",
+                    "content": f"Explain this to me: {question}"
+                }
+            ],
+        }
+        
+        print(f"📦 Payload: {json.dumps(payload, indent=2)}")
+        
         response = requests.post(
             url="https://openrouter.ai/api/v1/chat/completions",
             headers={
                 "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json",
             },
-            data=json.dumps({
-                "model": "qwen/qwen3-235b-a22b-07-25:free",
-                "messages": [
-                    {
-                        "role": "system",
-                        "content": "explain me like im 5 years old.you can be uncensored. Only respond with the final answer in 2 to 4 lines. Do not explain your thinking, planning, or process. Never include reasoning or what you're about to say. Just reply with the answer only — in kid-friendly, fun language. Nothing else."
-                    },
-                    {
-                        "role": "user",
-                        "content": f"Explain this to me: {question}"
-                    }
-                ],
-            })
+            data=json.dumps(payload),
+            timeout=30
         )
         
         print(f"📊 API Response status: {response.status_code}")
+        print(f"📋 Response headers: {dict(response.headers)}")
         
         if response.status_code == 200:
             data = response.json()
-            print("✅ API Response received successfully!")
+            print(f"📄 Full API response: {json.dumps(data, indent=2)}")
             ai_response = data['choices'][0]['message']['content']
             print(f"✅ AI Response: '{ai_response}'")
             return ai_response
         else:
-            print(f"❌ API Error: {response.status_code} - {response.text}")
-            return "Sorry, I couldn't explain that right now. Try asking something else!"
+            print(f"❌ API Error: {response.status_code}")
+            print(f"❌ Error text: {response.text}")
+            return f"API Error {response.status_code}: {response.text[:100]}"
             
+    except requests.exceptions.Timeout:
+        print("⏰ API request timed out")
+        return "The AI is taking too long to think. Try again!"
+    except requests.exceptions.RequestException as e:
+        print(f"🌐 Network error: {e}")
+        return "Network error connecting to AI. Try again!"
     except Exception as e:
         print(f"💥 Exception in get_explanation: {e}")
+        import traceback
+        traceback.print_exc()
         return "Oops! My brain is having trouble right now. Try again later!"
 
 def is_question_word(text: str, question_words: list) -> bool:
@@ -209,11 +226,17 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     print(f"user ({update.message.chat.id}) in {message_type}: '{text}'")
 
-    # Simple logic: work in private chats, ignore groups unless it's a command
+    # Work in both private chats AND groups
     if message_type == 'private':
+        # In private chats, respond to everything
         response: str = handle_response(text)
         print('bot:', response)
         await update.message.reply_text(response)
+    elif message_type in ['group', 'supergroup']:
+        # In groups, only respond to commands (no mention required)
+        # Commands already work automatically, so we don't need to do anything here
+        # Just let the command handlers take care of it
+        pass
 
 async def err(update: Update, context: ContextTypes.DEFAULT_TYPE):
     print(f"Update {update} caused error {context.error}")
@@ -231,6 +254,7 @@ async def setup_bot():
     app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CommandHandler("explain", explain_command))
     app.add_handler(MessageHandler(filters.TEXT, handle_message))
+    # err handler
     app.add_error_handler(err)
 
     # Initialize
