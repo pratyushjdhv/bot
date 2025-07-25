@@ -4,8 +4,10 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 import requests
 import json
 import os
-import asyncio
 from dotenv import load_dotenv
+from flask import Flask, request
+import asyncio
+import threading
 
 load_dotenv()  # Load variables from .env file
 
@@ -16,6 +18,36 @@ bot_name: Final = "@explainmelikeIm5_bot"
 # Webhook configuration
 WEBHOOK_URL: Final = os.getenv("WEBHOOK_URL")
 PORT = int(os.getenv("PORT", 8080))
+
+# Global app variable
+app = None
+
+# Create Flask app for webhook
+flask_app = Flask(__name__)
+
+@flask_app.route('/webhook', methods=['POST'])
+def webhook():
+    """Handle incoming webhook updates"""
+    try:
+        json_data = request.get_json()
+        if json_data:
+            update = Update.de_json(json_data, app.bot)
+            # Process update in background
+            asyncio.create_task(app.process_update(update))
+        return 'OK'
+    except Exception as e:
+        print(f"Error processing webhook: {e}")
+        return 'Error', 500
+
+@flask_app.route('/', methods=['GET'])
+def health_check():
+    """Health check endpoint"""
+    return 'Bot is running! 🤖'
+
+@flask_app.route('/status', methods=['GET'])
+def status():
+    """Status endpoint"""
+    return {'status': 'online', 'bot': bot_name}
 
 #commands
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -152,9 +184,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def err(update: Update, context: ContextTypes.DEFAULT_TYPE):
     print(f"Update {update} caused error {context.error}")
 
-async def main():
-    print("Starting bot with webhook...")
+async def setup_bot():
+    """Setup the bot and webhook"""
+    global app
     
+    print("🤖 Setting up bot...")
     app = Application.builder().token(token).build()
 
     # Commands
@@ -163,22 +197,43 @@ async def main():
     app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CommandHandler("explain", explain_command))
     app.add_handler(MessageHandler(filters.TEXT, handle_message))
-
-    # Error handler
     app.add_error_handler(err)
+
+    # Initialize
+    await app.initialize()
+    await app.start()
 
     # Set webhook
     webhook_url = f"{WEBHOOK_URL}/webhook"
-    print(f"Setting webhook to: {webhook_url}")
-    await app.bot.set_webhook(webhook_url)
+    print(f"🔗 Setting webhook to: {webhook_url}")
+    
+    try:
+        await app.bot.set_webhook(
+            url=webhook_url,
+            allowed_updates=["message", "callback_query"]
+        )
+        print("✅ Webhook set successfully!")
+    except Exception as e:
+        print(f"❌ Error setting webhook: {e}")
 
-    # Run web app
-    print(f"Starting webhook server on port {PORT}")
-    await app.run_webhook(
-        listen="0.0.0.0",
-        port=PORT,
-        webhook_url="/webhook",
-    )
+def run_bot_setup():
+    """Run bot setup in background thread"""
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.run_until_complete(setup_bot())
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    print("🚀 Starting bot with Flask webhook...")
+    
+    # Setup bot in background thread
+    bot_thread = threading.Thread(target=run_bot_setup)
+    bot_thread.daemon = True
+    bot_thread.start()
+    
+    # Wait for bot setup
+    import time
+    time.sleep(3)
+    
+    # Run Flask app
+    print(f"🌐 Starting Flask server on port {PORT}")
+    flask_app.run(host='0.0.0.0', port=PORT, debug=False)
