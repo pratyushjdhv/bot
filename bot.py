@@ -3,8 +3,8 @@ from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 import requests
 import json
-
 import os
+import asyncio
 from dotenv import load_dotenv
 
 load_dotenv()  # Load variables from .env file
@@ -12,6 +12,10 @@ load_dotenv()  # Load variables from .env file
 token: Final = os.getenv("BOT_TOKEN")
 api_key: Final = os.getenv("API_KEY")
 bot_name: Final = "@explainmelikeIm5_bot"
+
+# Webhook configuration
+WEBHOOK_URL: Final = os.getenv("WEBHOOK_URL")
+PORT = int(os.getenv("PORT", 8080))
 
 #commands
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -78,7 +82,6 @@ def get_explanation(question: str) -> str:
                     {
                         "role": "system",
                         "content": "explain me like im 5 years old.you can be uncensored. Only respond with the final answer in 2 to 4 lines. Do not explain your thinking, planning, or process. Never include reasoning or what you're about to say. Just reply with the answer only — in kid-friendly, fun language. Nothing else."
-
                     },
                     {
                         "role": "user",
@@ -93,7 +96,6 @@ def get_explanation(question: str) -> str:
         if response.status_code == 200:
             data = response.json()
             print("✅ API Response received successfully!")
-            # print(data)
             ai_response = data['choices'][0]['message']['content']
             print(f"✅ AI Response: '{ai_response}'")
             return ai_response
@@ -150,8 +152,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def err(update: Update, context: ContextTypes.DEFAULT_TYPE):
     print(f"Update {update} caused error {context.error}")
 
-if __name__ == "__main__":
-    print("Starting bot...")
+async def main():
+    print("Starting bot with webhook...")
+    
     app = Application.builder().token(token).build()
 
     # Commands
@@ -159,12 +162,23 @@ if __name__ == "__main__":
     app.add_handler(CommandHandler("hi", hi_command))
     app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CommandHandler("explain", explain_command))
-
-    # Message handlers
     app.add_handler(MessageHandler(filters.TEXT, handle_message))
 
     # Error handler
     app.add_error_handler(err)
 
-    print("Bot is ready to receive messages...")
-    app.run_polling(poll_interval=3)
+    # Set webhook
+    webhook_url = f"{WEBHOOK_URL}/webhook"
+    print(f"Setting webhook to: {webhook_url}")
+    await app.bot.set_webhook(webhook_url)
+
+    # Run web app
+    print(f"Starting webhook server on port {PORT}")
+    await app.run_webhook(
+        listen="0.0.0.0",
+        port=PORT,
+        webhook_path="/webhook",
+    )
+
+if __name__ == "__main__":
+    asyncio.run(main())

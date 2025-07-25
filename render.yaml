@@ -1,11 +1,11 @@
 services:
   - type: web
-    name: telegram-explain-bot
+    name: telegram-bot
     env: python
-    buildCommand: ""
-    startCommand: "./start.sh"
+    buildCommand: pip install -r requirements.txt
+    startCommand: python bot.py
     envVars:
-      - key: TOKEN
-        value: your_bot_token_here
-      - key: API_KEY
-        value: your_openrouter_api_key_here
+      - key: BOT_TOKEN
+        sync: false
+      - key: WEBHOOK_URL
+        sync: false
