@@ -221,22 +221,13 @@ def handle_response(text: str) -> str:
     return "I'm not sure how to respond to that. Try asking a question or use /explain!"
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    message_type: str = update.message.chat.type
+    # This now only handles non-command messages in private chats
     text: str = update.message.text
-
-    print(f"user ({update.message.chat.id}) in {message_type}: '{text}'")
-
-    # Work in both private chats AND groups
-    if message_type == 'private':
-        # In private chats, respond to everything
-        response: str = handle_response(text)
-        print('bot:', response)
-        await update.message.reply_text(response)
-    elif message_type in ['group', 'supergroup']:
-        # In groups, only respond to commands (no mention required)
-        # Commands already work automatically, so we don't need to do anything here
-        # Just let the command handlers take care of it
-        pass
+    print(f"user ({update.message.chat.id}) in private: '{text}'")
+    
+    response: str = handle_response(text)
+    print('bot:', response)
+    await update.message.reply_text(response)
 
 async def err(update: Update, context: ContextTypes.DEFAULT_TYPE):
     print(f"Update {update} caused error {context.error}")
@@ -248,13 +239,19 @@ async def setup_bot():
     print("🤖 Setting up bot...")
     app = Application.builder().token(token).build()
 
-    # Commands
+    # Commands (these work in ALL chat types)
     app.add_handler(CommandHandler("start", start_command))
     app.add_handler(CommandHandler("hi", hi_command))
     app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CommandHandler("explain", explain_command))
-    app.add_handler(MessageHandler(filters.TEXT, handle_message))
-    # err handler
+    
+    # Message handlers ONLY for non-command messages in private chats
+    app.add_handler(MessageHandler(
+        filters.TEXT & filters.ChatType.PRIVATE & ~filters.COMMAND, 
+        handle_message
+    ))
+    
+    # Error handler
     app.add_error_handler(err)
 
     # Initialize
