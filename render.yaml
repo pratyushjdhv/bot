@@ -2,10 +2,9 @@ services:
   - type: worker
     name: telegram-explain-bot
     env: python
-    buildCommand: ""
-    startCommand: "./start.sh"
+    startCommand: "python3 main.py"
     envVars:
-      - key: TOKEN
+      - key: BOT_TOKEN
         value: your_bot_token_here
       - key: API_KEY
-        value: your_openrouter_api_key_here
+        value: your_openrouter_key_here
