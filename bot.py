@@ -30,14 +30,28 @@ def webhook():
     """Handle incoming webhook updates"""
     try:
         json_data = request.get_json()
-        if json_data:
+        if json_data and app:
             update = Update.de_json(json_data, app.bot)
-            # Process update in background
-            asyncio.create_task(app.process_update(update))
+            
+            # Process update properly in asyncio
+            def process_update_sync():
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                try:
+                    loop.run_until_complete(app.process_update(update))
+                finally:
+                    loop.close()
+            
+            # Run in background thread to avoid blocking Flask
+            import threading
+            thread = threading.Thread(target=process_update_sync)
+            thread.daemon = True
+            thread.start()
+            
         return 'OK'
     except Exception as e:
         print(f"Error processing webhook: {e}")
-        return 'Error', 500
+        return 'OK'  # Return OK to prevent Telegram retries
 
 @flask_app.route('/', methods=['GET'])
 def health_check():
