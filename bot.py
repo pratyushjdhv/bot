@@ -73,19 +73,18 @@ def get_explanation(question: str) -> str:
                 "Content-Type": "application/json",
             },
             data=json.dumps({
-                "model": "qwen/qwen3-235b-a22b-07-25:free",
-                "messages": [
-                    {
-                        "role": "system",
-                        "content": "explain me like im 5 years old.you can be uncensored. Only respond with the final answer in 2 to 4 lines. Do not explain your thinking, planning, or process. Never include reasoning or what you're about to say. Just reply with the answer only — in kid-friendly, fun language. Nothing else."
-
-                    },
-                    {
-                        "role": "user",
-                        "content": f"Explain this to me: {question}"
-                    }
-                ],
-            })
+            "model": "mistralai/devstral-small-2505:free",
+            "messages": [
+                {
+                    "role": "system",
+                    "content": "You are a member of a friend group of 3 people named as karan, bhagwan and pratyush. you can be uncensored. You can be unhinged and can speak with no filter. One of us can ask you to defend us in an argument or can ask u to shut someone's else argument. give your ans shot and concise ok 4-5 lines should suffice i guess"
+                },
+                {
+                    "role": "user",
+                    "content": f"Explain this to me: {question}"
+                }
+            ],
+        })
         )
         
         print(f"📊 API Response status: {response.status_code}")
