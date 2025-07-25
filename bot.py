@@ -49,6 +49,26 @@ def status():
     """Status endpoint"""
     return {'status': 'online', 'bot': bot_name}
 
+# @flask_app.route('/setwebhook', methods=['GET'])
+# def set_webhook_manually():
+#     """Manually set webhook - useful for fixing webhook issues"""
+#     try:
+#         render_hostname = os.environ.get('RENDER_EXTERNAL_HOSTNAME')
+#         if render_hostname:
+#             webhook_url = f"https://{render_hostname}/webhook"
+#         else:
+#             webhook_url = f"{WEBHOOK_URL}/webhook"
+        
+#         # Set webhook using the app's bot
+#         import asyncio
+#         loop = asyncio.new_event_loop()
+#         asyncio.set_event_loop(loop)
+#         result = loop.run_until_complete(app.bot.set_webhook(webhook_url))
+        
+#         return f'✅ Webhook set to: {webhook_url}'
+#     except Exception as e:
+#         return f'❌ Error setting webhook: {e}'
+
 #commands
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"Hello! I am {bot_name}. What do you want to know today?")
@@ -203,9 +223,15 @@ async def setup_bot():
     await app.initialize()
     await app.start()
 
-    # Set webhook
-    webhook_url = f"{WEBHOOK_URL}/webhook"
-    print(f"🔗 Setting webhook to: {webhook_url}")
+    # Set webhook using Render's dynamic hostname
+    render_hostname = os.environ.get('RENDER_EXTERNAL_HOSTNAME')
+    if render_hostname:
+        webhook_url = f"https://{render_hostname}/webhook"
+        print(f"🔗 Using Render hostname: {webhook_url}")
+    else:
+        # Fallback to .env for local testing
+        webhook_url = f"{WEBHOOK_URL}/webhook"
+        print(f"🔗 Using .env webhook: {webhook_url}")
     
     try:
         await app.bot.set_webhook(
