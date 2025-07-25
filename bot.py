@@ -286,6 +286,27 @@ def run_bot_setup():
     asyncio.set_event_loop(loop)
     loop.run_until_complete(setup_bot())
 
+@flask_app.route('/test-api', methods=['GET'])
+def test_api():
+    """Test the OpenRouter API"""
+    try:
+        print("🧪 Testing API...")
+        result = get_explanation("What is 2+2?")
+        return f"API Test Result: {result}"
+    except Exception as e:
+        return f"API Test Failed: {e}"
+
+@flask_app.route('/debug-env', methods=['GET'])
+def debug_env():
+    """Debug environment variables"""
+    return {
+        'bot_token_length': len(token) if token else 0,
+        'api_key_length': len(api_key) if api_key else 0,
+        'webhook_url': WEBHOOK_URL,
+        'render_hostname': os.environ.get('RENDER_EXTERNAL_HOSTNAME', 'Not set'),
+        'port': PORT
+    }
+
 if __name__ == "__main__":
     print("🚀 Starting bot with Flask webhook...")
     
