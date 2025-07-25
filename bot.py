@@ -8,6 +8,8 @@ from dotenv import load_dotenv
 from flask import Flask, request
 import asyncio
 import threading
+import queue
+import time 
 
 load_dotenv()  # Load variables from .env file
 
@@ -25,6 +27,8 @@ app = None
 # Create Flask app for webhook
 flask_app = Flask(__name__)
 
+update_queue = queue.Queue()
+
 @flask_app.route('/webhook', methods=['POST'])
 def webhook():
     """Handle incoming webhook updates"""
@@ -32,25 +36,15 @@ def webhook():
         json_data = request.get_json()
         print(f"📨 Received webhook data: {json_data}")
         
-        if json_data and app:
-            update = Update.de_json(json_data, app.bot)
-            print(f"📩 Processing update: {update.update_id}")
-            
-            # Process update in new event loop
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            try:
-                loop.run_until_complete(app.process_update(update))
-                print("✅ Update processed successfully!")
-            except Exception as e:
-                print(f"❌ Error processing update: {e}")
-            finally:
-                loop.close()
+        if json_data:
+            # Just add to queue, don't process here
+            update_queue.put(json_data)
+            print("📤 Update added to queue")
             
         return 'OK', 200
     except Exception as e:
         print(f"💥 Webhook error: {e}")
-        return 'OK', 200  # Always return OK to prevent Telegram retries
+        return 'OK', 200
 
 @flask_app.route('/', methods=['GET'])
 def health_check():
@@ -83,6 +77,10 @@ def debug_env():
         'render_hostname': os.environ.get('RENDER_EXTERNAL_HOSTNAME', 'Not set'),
         'port': PORT
     }
+
+@flask_app.route('/queue-status', methods=['GET'])
+def queue_status():
+    return {'queue_size': update_queue.qsize()}
 
 #commands
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -319,6 +317,41 @@ def run_bot_setup():
     asyncio.set_event_loop(loop)
     loop.run_until_complete(setup_bot())
 
+def process_updates():
+    """Process updates from queue"""
+    while True:
+        try:
+            # Get update from queue (wait up to 1 second)
+            json_data = update_queue.get(timeout=1)
+            
+            if json_data and app:
+                update = Update.de_json(json_data, app.bot)
+                print(f"📩 Processing queued update: {update.update_id}")
+                
+                # Create new event loop for this thread
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                
+                try:
+                    loop.run_until_complete(app.process_update(update))
+                    print("✅ Update processed successfully!")
+                except Exception as e:
+                    print(f"❌ Error processing update: {e}")
+                    import traceback
+                    traceback.print_exc()
+                finally:
+                    loop.close()
+                    
+            update_queue.task_done()
+            
+        except queue.Empty:
+            # No updates in queue, continue waiting
+            continue
+        except Exception as e:
+            print(f"💥 Error in update processor: {e}")
+            import traceback
+            traceback.print_exc()
+
 if __name__ == "__main__":
     print("🚀 Starting bot with Flask webhook...")
     print(f"🔑 API Key loaded: {bool(api_key)} (length: {len(api_key) if api_key else 0})")
@@ -328,6 +361,12 @@ if __name__ == "__main__":
     bot_thread = threading.Thread(target=run_bot_setup)
     bot_thread.daemon = True
     bot_thread.start()
+    
+    # Start update processor thread
+    processor_thread = threading.Thread(target=process_updates)
+    processor_thread.daemon = True
+    processor_thread.start()
+    print("🔄 Update processor started")
     
     # Wait for bot setup
     import time
